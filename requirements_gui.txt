@@ -1,0 +1,21 @@
+#############################################################
+# KronaTools GUI – Dependencies & Installation Guide
+#############################################################
+
+# 1. Ensure 'pip' is available:
+#    python3 -m ensurepip --upgrade
+#    pip --version
+
+# 2. Install the required Python modules one by one:
+#    pip install tkinter       # GUI framework 
+
+# 3. To run the GUI:
+#    krona_gui
+
+# Gentoo users: If tkinter is missing:
+#    emerge dev-python/python-tk
+###
+
+tkinter
+requests>=2.0
+numpy>=1.20

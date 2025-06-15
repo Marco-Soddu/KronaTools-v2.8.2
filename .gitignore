@@ -1,0 +1,10 @@
+# Exclude taxonomy databases
+taxonomy/
+accession2taxid/
+
+# Exclude archives or large downloads
+*.tar.gz
+
+# Ignore logs and build artifacts
+*.log
+*.tmp

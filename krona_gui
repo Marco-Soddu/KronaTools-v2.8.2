@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import webbrowser
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+
+# ------------------------------------------------------------
+# Mapping statique des options pour chaque kt…
+# ------------------------------------------------------------
+SCRIPT_OPTIONS = {
+    # ————— Classification —————
+    "ktClassifyBLAST": [
+        ("t",   "Bit-score threshold (-t)",           float),
+        ("f",   "Force root if unknown hits (-f)",    bool),
+        ("r",   "Random sampling (-r)",               bool),
+        ("p",   "Average % identity (-p)",            bool),
+        ("b",   "Average bit-score (-b)",             bool),
+        ("s",   "Summary counts/scores (-s)",         bool),
+        ("e",   "E-value factor (-e)",                float),
+    ],
+    "ktClassifyHits": [
+        ("t", "Score threshold (-t)",              float),
+        ("r", "Random sampling (-r)",              bool),
+        ("s", "Summary counts/scores (-s)",        bool),
+    ],
+
+    # ————— Krona data import —————
+    "ktImportBLAST": [
+        ("n",    "Root level name (-n)",               str),
+        ("t",    "Bit-score threshold (-t)",           float),
+        ("i",    "Include no-hits (-i)",               bool),
+        ("f",    "Force root if unknown hits (-f)",    bool),
+        ("r",    "Random sampling (-r)",               bool),
+        ("p",    "Average % identity (-p)",            bool),
+        ("b",    "Average bit-score (-b)",             bool),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("k",    "Show 'cellular organisms' (-k)",     bool),
+        ("K",    "Collapse no-ranks (-K)",             bool),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+        ("tax",  "Local taxonomy DB path (-tax)",      str),
+        ("e",    "E-value factor (-e)",                float),
+    ],
+    "ktImportHits": [
+        ("n",    "Root level name (-n)",               str),
+        ("t",    "Score threshold (-t)",               float),
+        ("i",    "Include no-hits (-i)",               bool),
+        ("r",    "Random sampling (-r)",               bool),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("k",    "Show 'cellular organisms' (-k)",     bool),
+        ("K",    "Collapse no-ranks (-K)",             bool),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+        ("tax",  "Local taxonomy DB path (-tax)",      str),
+    ],
+    "ktImportKrona": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportDiskUsage": [
+        ("u",    "Krona resources URL (-u)",           str),
+    ],
+    "ktImportEC": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("q",    "Query ID column (-q)",               int),
+        ("e",    "EC column (-e)",                     int),
+        ("s",    "Score column (-s)",                  int),
+        ("m",    "Magnitude column (-m)",              int),
+        ("i",    "Include no-hits (-i)",               bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportFCP": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportGalaxy": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportMETAREP-BLAST": [
+        ("n",    "Root level name (-n)",               str),
+        ("r",    "Random sampling (-r)",               bool),
+        ("p",    "Average % identity (-p)",            bool),
+        ("b",    "Average bit-score (-b)",             bool),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("k",    "Show 'cellular organisms' (-k)",     bool),
+        ("K",    "Collapse no-ranks (-K)",             bool),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+        ("tax",  "Local taxonomy DB path (-tax)",      str),
+        ("v",    "Verbose (-v)",                       bool),
+    ],
+    "ktImportMETAREP-EC": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("i",    "Include no-hits (-i)",               bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+        ("v",    "Verbose (-v)",                       bool),
+    ],
+    "ktImportMGRAST": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("p",    "Average % identity (-p)",            bool),
+        ("u",    "Krona resources URL (-u)",           str),
+    ],
+    "ktImportPhymmBL": [
+        ("n",    "Root level name (-n)",               str),
+        ("m",    "Minimum confidence (-m)",            float),
+        ("c",    "Combine files (-c)",                 bool),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("p",    "Phymm-only mode (-p)",               bool),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportRDP": [
+        ("n",    "Root level name (-n)",               str),
+        ("c",    "Combine files (-c)",                 bool),
+        ("m",    "Minimum confidence (-m)",            float),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+    ],
+    "ktImportRDPComparison": [
+        ("n",    "Root level name (-n)",               str),
+        ("d",    "Max depth (-d)",                     int),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+    ],
+    "ktImportTaxonomy": [
+        ("n",    "Root level name (-n)",               str),
+        ("i",    "Include no-hits (-i)",               bool),
+        ("c",    "Combine files (-c)",                 bool),
+        ("q",    "Query ID column (-q)",               int),
+        ("t",    "TaxID column (-t)",                  int),
+        ("s",    "Score column (-s)",                  int),
+        ("m",    "Magnitude column (-m)",              int),
+        ("d",    "Max depth (-d)",                     int),
+        ("k",    "Show 'cellular organisms' (-k)",     bool),
+        ("K",    "Collapse no-ranks (-K)",             bool),
+        ("x",    "Tint bad scores (-x)",               int),
+        ("y",    "Tint good scores (-y)",              int),
+        ("u",    "Krona resources URL (-u)",           str),
+        ("post", "POST URL for IDs (-post)",           str),
+        ("tax",  "Local taxonomy DB path (-tax)",      str),
+    ],
+    "ktImportText": [
+        ("n",    "Root level name (-n)",               str),
+        ("q",    "No magnitude field (-q)",            bool),
+        ("c",    "Combine files (-c)",                 bool),
+        ("u",    "Krona resources URL (-u)",           str),
+    ],
+    "ktImportXML": [
+        ("u",    "Krona resources URL (-u)",           str),
+    ],
+
+    # ————— Utility tools —————
+    "ktGetContigMagnitudes": [],
+    "ktGetLCA": [
+        ("s", "Streaming mode (-s)", bool)
+    ],
+    "ktGetLibPath": [],
+    "ktGetTaxIDFromAcc": [
+        ("p",    "Prepend taxID (-p)",               bool),
+        ("a",    "Append taxID (-a)",                bool),
+        ("f",    "Accession field number (-f)",      int),
+        ("tax",  "Local taxonomy DB path (-tax)",    str),
+    ],
+    "ktGetTaxInfo": [
+        ("p",    "Prepend info (-p)",                bool),
+        ("a",    "Append info (-a)",                 bool),
+        ("f",    "Accession field number (-f)",      int),
+        ("tax",  "Local taxonomy DB path (-tax)",    str),
+    ],
+}
+
+class KronaGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("KronaTools GUI")
+        self.geometry("650x600")
+        self._configure_style()
+
+        # chemin des binaires
+        self.binpath = "/opt/kronatools/bin"
+
+        # découvrir tous les kt*
+        try:
+            self.scripts = sorted(
+                f for f in os.listdir(self.binpath)
+                if f.startswith("kt") and os.access(os.path.join(self.binpath, f), os.X_OK)
+            )
+        except Exception:
+            self.scripts = []
+
+        # récupérer les options statiques
+        self.script_options = {
+            scr: SCRIPT_OPTIONS.get(scr, [])
+            for scr in self.scripts
+        }
+
+        self._build_widgets()
+
+    def _configure_style(self):
+        s = ttk.Style(self)
+        s.theme_use('clam')
+        s.configure('TLabel',            font=('Segoe UI', 10))
+        s.configure('TButton',           font=('Segoe UI', 10, 'bold'), padding=6)
+        s.configure('TEntry',            padding=4)
+        s.configure('TCheckbutton',      padding=4)
+        s.configure('TLabelframe',       padding=8)
+        s.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'))
+        s.map('TButton',
+              background=[('active', '#67aeee'), ('!active', '#1670bf')],
+              foreground=[('!disabled', '#fff')])
+
+    def _build_widgets(self):
+        # Script
+        ttk.Label(self, text="Script :")\
+            .grid(row=0, column=0, sticky='w', padx=10, pady=(10,0))
+        self.script_var = tk.StringVar(value=self.scripts[0] if self.scripts else "")
+        cmb = ttk.Combobox(self, values=self.scripts, textvariable=self.script_var, state='readonly')
+        cmb.grid(row=0, column=1, columnspan=2, sticky='ew', padx=10, pady=(10,0))
+        cmb.bind('<<ComboboxSelected>>', lambda e: self._on_script_change(self.script_var.get()))
+        ttk.Separator(self, orient='horizontal')\
+            .grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+
+        # Fichier principal
+        self.file_frame = ttk.Labelframe(self, text="Fichier principal")
+        self.file_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=10)
+        self._build_file_selector(self.file_frame, "input_file", 0, self._on_input_select)
+
+        # Fichier magnitudes (caché)
+        self.mag_frame = ttk.Labelframe(self, text="Fichier de magnitudes")
+        self.mag_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=(5,0))
+        self._build_file_selector(self.mag_frame, "mag_file", 0, self._on_mag_select)
+        self.mag_frame.grid_remove()
+
+        ttk.Separator(self, orient='horizontal')\
+            .grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+
+        # Sortie
+        out = ttk.Labelframe(self, text="Sortie")
+        out.grid(row=5, column=0, columnspan=3, sticky='ew', padx=10)
+        self.out_place = tk.BooleanVar(value=True)
+        ttk.Radiobutton(out, text="Même dossier que l’entrée",
+                        variable=self.out_place, value=True,
+                        command=self._update_out_name)\
+           .grid(row=0, column=0, sticky='w', padx=5)
+        ttk.Radiobutton(out, text="Choisir un dossier",
+                        variable=self.out_place, value=False,
+                        command=self._on_out_dir_toggle)\
+           .grid(row=1, column=0, sticky='w', padx=5)
+        self.out_dir = tk.StringVar()
+        ttk.Entry(out, textvariable=self.out_dir)\
+           .grid(row=2, column=0, columnspan=2, sticky='ew', padx=5)
+        ttk.Button(out, text="Parcourir…", command=self._on_out_dir_select)\
+           .grid(row=2, column=2, padx=5)
+        ttk.Label(out, text="Nom de sortie :")\
+           .grid(row=3, column=0, sticky='w', padx=5, pady=(5,0))
+        self.out_name = tk.StringVar()
+        ttk.Entry(out, textvariable=self.out_name)\
+           .grid(row=3, column=1, columnspan=2, sticky='ew', padx=5)
+
+        ttk.Separator(self, orient='horizontal')\
+            .grid(row=6, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+
+        # Options spécifiques
+        self.opt_frame = ttk.Labelframe(self, text="Options spécifiques")
+        self.opt_frame.grid(row=7, column=0, columnspan=3, sticky='nsew', padx=10, pady=(0,5))
+        self.rowconfigure(7, weight=1)
+        self.columnconfigure(1, weight=1)
+
+        # Boutons
+        ttk.Button(self, text="Générer", command=self._on_generate)\
+           .grid(row=8, column=1, sticky='e', padx=5, pady=10)
+        ttk.Button(self, text="Réinitialiser", command=self._on_reset)\
+           .grid(row=8, column=2, sticky='w', padx=5, pady=10)
+
+        # Première population
+        if self.scripts:
+            self._on_script_change(self.script_var.get())
+
+    def _build_file_selector(self, parent, varname, row, cmd):
+        setattr(self, varname, tk.StringVar())
+        ttk.Entry(parent, textvariable=getattr(self, varname))\
+           .grid(row=row, column=0, sticky='ew', padx=5, pady=5)
+        ttk.Button(parent, text="Choisir…", command=cmd)\
+           .grid(row=row, column=1, padx=5)
+        parent.columnconfigure(0, weight=1)
+
+    # Callbacks fichiers / dossiers
+    def _on_input_select(self):
+        p = filedialog.askopenfilename()
+        if p:
+            self.input_file.set(p)
+            self._update_out_name()
+
+    def _on_mag_select(self):
+        p = filedialog.askopenfilename()
+        if p:
+            self.mag_file.set(p)
+
+    def _on_out_dir_select(self):
+        d = filedialog.askdirectory()
+        if d:
+            self.out_dir.set(d)
+
+    def _on_out_dir_toggle(self):
+        if self.out_place.get():
+            self.out_dir_entry.grid_remove()
+        else:
+            self.out_dir_entry.grid()
+
+    def _update_out_name(self, *_):
+        base = os.path.splitext(os.path.basename(self.input_file.get()))[0]
+        self.out_name.set(f"{base}.{self.script_var.get()}.html")
+
+    def _on_reset(self):
+        self.script_var.set(self.scripts[0])
+        self.input_file.set("")
+        self.mag_file.set("")
+        self.out_dir.set("")
+        self.out_place.set(True)
+        self._update_out_name()
+        self._on_script_change(self.script_var.get())
+
+    def _on_script_change(self, script):
+        # Affichage du champ magnitudes si nécessaire
+        if script in ("ktImportBLAST", "ktImportHits", "ktImportEC"):
+            self.mag_frame.grid()
+        else:
+            self.mag_frame.grid_remove()
+
+        # Vider l’ancienne zone
+        for w in self.opt_frame.winfo_children():
+            w.destroy()
+
+        opts = self.script_options.get(script, [])
+        self.opt_vars = {}
+
+        for i, (name, desc, has_arg) in enumerate(opts):
+            if has_arg is bool:
+                # Checkbox simple
+                var = tk.BooleanVar()
+                cb = ttk.Checkbutton(self.opt_frame, text=desc, variable=var)
+                cb.grid(row=i, column=0, columnspan=2, sticky='w', padx=5, pady=2)
+                self.opt_vars[name] = var
+            else:
+                # Option à argument : checkbox + Entry dynamique
+                enabled = tk.BooleanVar()
+                value   = tk.StringVar()
+
+                chk = ttk.Checkbutton(self.opt_frame, text=desc, variable=enabled)
+                chk.grid(row=i, column=0, sticky='w', padx=5, pady=2)
+
+                ent = ttk.Entry(self.opt_frame, textvariable=value)
+                # ne pas grid() tout de suite
+                ent.grid_remove()
+                self.opt_frame.columnconfigure(1, weight=1)
+
+                def make_toggle(entry, flag_var, row=i):
+                    def toggle(*_):
+                        if flag_var.get():
+                            entry.grid(row=row, column=1, sticky='ew', padx=5, pady=2)
+                        else:
+                            entry.grid_remove()
+                    return toggle
+
+                toggle_fn = make_toggle(ent, enabled, i)
+                enabled.trace_add('write', lambda *a, fn=toggle_fn: fn())
+                # cacher au démarrage
+                toggle_fn()
+
+                self.opt_vars[name] = (enabled, value)
+
+    def _on_generate(self):
+        if not self.input_file.get():
+            return messagebox.showerror("Erreur", "Veuillez sélectionner un fichier d’entrée.")
+        outdir = (os.path.dirname(self.input_file.get())
+                  if self.out_place.get() else self.out_dir.get())
+        if not os.path.isdir(outdir):
+            return messagebox.showerror("Erreur", "Dossier de sortie invalide.")
+
+        cmd = [os.path.join(self.binpath, self.script_var.get()),
+               "-o", os.path.join(outdir, self.out_name.get()),
+               self.input_file.get()]
+        if hasattr(self, 'mag_file') and self.mag_file.get():
+            cmd += [":", self.mag_file.get()]
+
+        # options
+        for name, var in self.opt_vars.items():
+            if isinstance(var, tuple):
+                enabled_var, value_var = var
+                val = value_var.get().strip()
+                if enabled_var.get() and val:
+                    cmd += [f"-{name}", val]
+            else:
+                if var.get():
+                    cmd.append(f"-{name}")
+
+        try:
+            subprocess.run(cmd, check=True)
+            messagebox.showinfo("Terminé", "Le script s'est exécuté avec succès.")
+            html = os.path.join(outdir, self.out_name.get())
+            webbrowser.open("file://" + os.path.abspath(html))
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Échec de l’exécution :\n{e}")
+
+if __name__ == "__main__":
+    KronaGUI().mainloop()
+
