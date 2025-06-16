@@ -2,12 +2,10 @@
 import os
 import subprocess
 import webbrowser
+import shutil
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-# ------------------------------------------------------------
-# Mapping statique des options pour chaque kt…
-# ------------------------------------------------------------
 SCRIPT_OPTIONS = {
     # ————— Classification —————
     "ktClassifyBLAST": [
@@ -216,10 +214,19 @@ class KronaGUI(tk.Tk):
         self.geometry("650x600")
         self._configure_style()
 
-        # chemin des binaires
-        self.binpath = "/opt/kronatools/bin"
+        # Auto-detect: PATH then standard directories
+        self.binpath = self.detect_krona_bin_path()
+        if not self.binpath:
+            messagebox.showerror(
+                "KronaTools Not Found",
+                "Unable to locate ktImportBLAST.\n"
+                "Please ensure KronaTools is installed (default: /usr/local/bin).\n"
+                "Or add its install directory to your $PATH."
+            )
+            self.destroy()
+            return
 
-        # découvrir tous les kt*
+        # Discover all kt* scripts
         try:
             self.scripts = sorted(
                 f for f in os.listdir(self.binpath)
@@ -228,118 +235,125 @@ class KronaGUI(tk.Tk):
         except Exception:
             self.scripts = []
 
-        # récupérer les options statiques
-        self.script_options = {
-            scr: SCRIPT_OPTIONS.get(scr, [])
-            for scr in self.scripts
-        }
+        # Load static options for each script
+        self.script_options = {scr: SCRIPT_OPTIONS.get(scr, []) for scr in self.scripts}
 
         self._build_widgets()
 
+    def detect_krona_bin_path(self):
+        """
+        1) Look for ktImportBLAST in PATH
+        2) Otherwise check typical install locations:
+           - /usr/local/bin (default)
+           - /usr/bin
+           - ../bin relative to this script
+        """
+        kt_tool = shutil.which("ktImportBLAST")
+        if kt_tool:
+            return os.path.dirname(kt_tool)
+
+        candidates = [
+            "/usr/local/bin",
+            "/usr/bin",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "bin"))
+        ]
+        for d in candidates:
+            exe = os.path.join(d, "ktImportBLAST")
+            if os.path.isfile(exe) and os.access(exe, os.X_OK):
+                return d
+        return None
+
     def _configure_style(self):
-        s = ttk.Style(self)
-        s.theme_use('clam')
-        s.configure('TLabel',            font=('Segoe UI', 10))
-        s.configure('TButton',           font=('Segoe UI', 10, 'bold'), padding=6)
-        s.configure('TEntry',            padding=4)
-        s.configure('TCheckbutton',      padding=4)
-        s.configure('TLabelframe',       padding=8)
-        s.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'))
-        s.map('TButton',
-              background=[('active', '#67aeee'), ('!active', '#1670bf')],
-              foreground=[('!disabled', '#fff')])
+        style = ttk.Style(self)
+        style.theme_use('clam')
+        style.configure('TLabel', font=('Segoe UI', 10))
+        style.configure('TButton', font=('Segoe UI', 10, 'bold'), padding=6)
+        style.configure('TEntry', padding=4)
+        style.configure('TCheckbutton', padding=4)
+        style.configure('TLabelframe', padding=8)
+        style.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'))
+        style.map('TButton',
+                  background=[('active', '#67aeee'), ('!active', '#1670bf')],
+                  foreground=[('!disabled', '#fff')])
 
     def _build_widgets(self):
-        # Script
-        ttk.Label(self, text="Script :")\
-            .grid(row=0, column=0, sticky='w', padx=10, pady=(10,0))
+        # Script selection
+        ttk.Label(self, text="Script:").grid(row=0, column=0, sticky='w', padx=10, pady=(10,0))
         self.script_var = tk.StringVar(value=self.scripts[0] if self.scripts else "")
-        cmb = ttk.Combobox(self, values=self.scripts, textvariable=self.script_var, state='readonly')
-        cmb.grid(row=0, column=1, columnspan=2, sticky='ew', padx=10, pady=(10,0))
-        cmb.bind('<<ComboboxSelected>>', lambda e: self._on_script_change(self.script_var.get()))
-        ttk.Separator(self, orient='horizontal')\
-            .grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        combo = ttk.Combobox(self, values=self.scripts, textvariable=self.script_var, state='readonly')
+        combo.grid(row=0, column=1, columnspan=2, sticky='ew', padx=10, pady=(10,0))
+        combo.bind('<<ComboboxSelected>>', lambda e: self._on_script_change(self.script_var.get()))
+        ttk.Separator(self, orient='horizontal').grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
 
-        # Fichier principal
-        self.file_frame = ttk.Labelframe(self, text="Fichier principal")
+        # Input file
+        self.file_frame = ttk.Labelframe(self, text="Input File")
         self.file_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=10)
         self._build_file_selector(self.file_frame, "input_file", 0, self._on_input_select)
 
-        # Fichier magnitudes (caché)
-        self.mag_frame = ttk.Labelframe(self, text="Fichier de magnitudes")
+        # Magnitudes file (hidden by default)
+        self.mag_frame = ttk.Labelframe(self, text="Magnitudes File")
         self.mag_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=(5,0))
         self._build_file_selector(self.mag_frame, "mag_file", 0, self._on_mag_select)
         self.mag_frame.grid_remove()
 
-        ttk.Separator(self, orient='horizontal')\
-            .grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        # Output settings
+        ttk.Separator(self, orient='horizontal').grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        out_frame = ttk.Labelframe(self, text="Output")
+        out_frame.grid(row=5, column=0, columnspan=3, sticky='ew', padx=10)
 
-        # Sortie
-        out = ttk.Labelframe(self, text="Sortie")
-        out.grid(row=5, column=0, columnspan=3, sticky='ew', padx=10)
         self.out_place = tk.BooleanVar(value=True)
-        ttk.Radiobutton(out, text="Même dossier que l’entrée",
+        ttk.Radiobutton(out_frame, text="Same folder as input",
                         variable=self.out_place, value=True,
-                        command=self._update_out_name)\
-           .grid(row=0, column=0, sticky='w', padx=5)
-        ttk.Radiobutton(out, text="Choisir un dossier",
+                        command=self._update_out_name).grid(row=0, column=0, sticky='w', padx=5)
+        ttk.Radiobutton(out_frame, text="Choose a folder...",
                         variable=self.out_place, value=False,
-                        command=self._on_out_dir_toggle)\
-           .grid(row=1, column=0, sticky='w', padx=5)
+                        command=self._on_out_dir_toggle).grid(row=1, column=0, sticky='w', padx=5)
+
         self.out_dir = tk.StringVar()
-        ttk.Entry(out, textvariable=self.out_dir)\
-           .grid(row=2, column=0, columnspan=2, sticky='ew', padx=5)
-        ttk.Button(out, text="Parcourir…", command=self._on_out_dir_select)\
-           .grid(row=2, column=2, padx=5)
-        ttk.Label(out, text="Nom de sortie :")\
-           .grid(row=3, column=0, sticky='w', padx=5, pady=(5,0))
+        self.out_dir_entry = ttk.Entry(out_frame, textvariable=self.out_dir)
+        self.out_dir_entry.grid(row=2, column=0, columnspan=2, sticky='ew', padx=5)
+        ttk.Button(out_frame, text="Browse...", command=self._on_out_dir_select).grid(row=2, column=2, padx=5)
+
+        ttk.Label(out_frame, text="Output name:").grid(row=3, column=0, sticky='w', padx=5, pady=(5,0))
         self.out_name = tk.StringVar()
-        ttk.Entry(out, textvariable=self.out_name)\
-           .grid(row=3, column=1, columnspan=2, sticky='ew', padx=5)
+        ttk.Entry(out_frame, textvariable=self.out_name).grid(row=3, column=1, columnspan=2, sticky='ew', padx=5)
 
-        ttk.Separator(self, orient='horizontal')\
-            .grid(row=6, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-
-        # Options spécifiques
-        self.opt_frame = ttk.Labelframe(self, text="Options spécifiques")
+        # Options frame
+        ttk.Separator(self, orient='horizontal').grid(row=6, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        self.opt_frame = ttk.Labelframe(self, text="Specific Options")
         self.opt_frame.grid(row=7, column=0, columnspan=3, sticky='nsew', padx=10, pady=(0,5))
         self.rowconfigure(7, weight=1)
         self.columnconfigure(1, weight=1)
 
-        # Boutons
-        ttk.Button(self, text="Générer", command=self._on_generate)\
-           .grid(row=8, column=1, sticky='e', padx=5, pady=10)
-        ttk.Button(self, text="Réinitialiser", command=self._on_reset)\
-           .grid(row=8, column=2, sticky='w', padx=5, pady=10)
+        # Generate and Reset buttons
+        ttk.Button(self, text="Generate", command=self._on_generate).grid(row=8, column=1, sticky='e', padx=5, pady=10)
+        ttk.Button(self, text="Reset", command=self._on_reset).grid(row=8, column=2, sticky='w', padx=5, pady=10)
 
-        # Première population
+        # Initialize options for first script
         if self.scripts:
             self._on_script_change(self.script_var.get())
 
-    def _build_file_selector(self, parent, varname, row, cmd):
+    def _build_file_selector(self, parent, varname, row, command):
         setattr(self, varname, tk.StringVar())
-        ttk.Entry(parent, textvariable=getattr(self, varname))\
-           .grid(row=row, column=0, sticky='ew', padx=5, pady=5)
-        ttk.Button(parent, text="Choisir…", command=cmd)\
-           .grid(row=row, column=1, padx=5)
+        ttk.Entry(parent, textvariable=getattr(self, varname)).grid(row=row, column=0, sticky='ew', padx=5, pady=5)
+        ttk.Button(parent, text="Select...", command=command).grid(row=row, column=1, padx=5)
         parent.columnconfigure(0, weight=1)
 
-    # Callbacks fichiers / dossiers
     def _on_input_select(self):
-        p = filedialog.askopenfilename()
-        if p:
-            self.input_file.set(p)
+        path = filedialog.askopenfilename()
+        if path:
+            self.input_file.set(path)
             self._update_out_name()
 
     def _on_mag_select(self):
-        p = filedialog.askopenfilename()
-        if p:
-            self.mag_file.set(p)
+        path = filedialog.askopenfilename()
+        if path:
+            self.mag_file.set(path)
 
     def _on_out_dir_select(self):
-        d = filedialog.askdirectory()
-        if d:
-            self.out_dir.set(d)
+        directory = filedialog.askdirectory()
+        if directory:
+            self.out_dir.set(directory)
 
     def _on_out_dir_toggle(self):
         if self.out_place.get():
@@ -361,86 +375,78 @@ class KronaGUI(tk.Tk):
         self._on_script_change(self.script_var.get())
 
     def _on_script_change(self, script):
-        # Affichage du champ magnitudes si nécessaire
+        # Show magnitudes frame for certain scripts
         if script in ("ktImportBLAST", "ktImportHits", "ktImportEC"):
             self.mag_frame.grid()
         else:
             self.mag_frame.grid_remove()
 
-        # Vider l’ancienne zone
-        for w in self.opt_frame.winfo_children():
-            w.destroy()
+        # Clear previous option widgets
+        for widget in self.opt_frame.winfo_children():
+            widget.destroy()
 
-        opts = self.script_options.get(script, [])
+        options = self.script_options.get(script, [])
         self.opt_vars = {}
 
-        for i, (name, desc, has_arg) in enumerate(opts):
-            if has_arg is bool:
-                # Checkbox simple
+        for idx, (name, desc, arg_type) in enumerate(options):
+            if arg_type is bool:
                 var = tk.BooleanVar()
-                cb = ttk.Checkbutton(self.opt_frame, text=desc, variable=var)
-                cb.grid(row=i, column=0, columnspan=2, sticky='w', padx=5, pady=2)
+                chk = ttk.Checkbutton(self.opt_frame, text=desc, variable=var)
+                chk.grid(row=idx, column=0, columnspan=2, sticky='w', padx=5, pady=2)
                 self.opt_vars[name] = var
             else:
-                # Option à argument : checkbox + Entry dynamique
                 enabled = tk.BooleanVar()
-                value   = tk.StringVar()
-
+                value = tk.StringVar()
                 chk = ttk.Checkbutton(self.opt_frame, text=desc, variable=enabled)
-                chk.grid(row=i, column=0, sticky='w', padx=5, pady=2)
-
-                ent = ttk.Entry(self.opt_frame, textvariable=value)
-                # ne pas grid() tout de suite
-                ent.grid_remove()
+                chk.grid(row=idx, column=0, sticky='w', padx=5, pady=2)
+                entry = ttk.Entry(self.opt_frame, textvariable=value)
+                entry.grid_remove()
                 self.opt_frame.columnconfigure(1, weight=1)
-
-                def make_toggle(entry, flag_var, row=i):
+                def make_toggle(e, flag, row=idx):
                     def toggle(*_):
-                        if flag_var.get():
-                            entry.grid(row=row, column=1, sticky='ew', padx=5, pady=2)
+                        if flag.get():
+                            e.grid(row=row, column=1, sticky='ew', padx=5, pady=2)
                         else:
-                            entry.grid_remove()
+                            e.grid_remove()
                     return toggle
-
-                toggle_fn = make_toggle(ent, enabled, i)
+                toggle_fn = make_toggle(entry, enabled)
                 enabled.trace_add('write', lambda *a, fn=toggle_fn: fn())
-                # cacher au démarrage
                 toggle_fn()
-
                 self.opt_vars[name] = (enabled, value)
 
     def _on_generate(self):
         if not self.input_file.get():
-            return messagebox.showerror("Erreur", "Veuillez sélectionner un fichier d’entrée.")
-        outdir = (os.path.dirname(self.input_file.get())
-                  if self.out_place.get() else self.out_dir.get())
-        if not os.path.isdir(outdir):
-            return messagebox.showerror("Erreur", "Dossier de sortie invalide.")
+            return messagebox.showerror("Error", "Please select an input file.")
+        output_dir = (os.path.dirname(self.input_file.get()) if self.out_place.get() else self.out_dir.get())
+        if not os.path.isdir(output_dir):
+            return messagebox.showerror("Error", "Invalid output directory.")
 
         cmd = [os.path.join(self.binpath, self.script_var.get()),
-               "-o", os.path.join(outdir, self.out_name.get()),
+               "-o", os.path.join(output_dir, self.out_name.get()),
                self.input_file.get()]
         if hasattr(self, 'mag_file') and self.mag_file.get():
             cmd += [":", self.mag_file.get()]
 
-        # options
         for name, var in self.opt_vars.items():
             if isinstance(var, tuple):
-                enabled_var, value_var = var
-                val = value_var.get().strip()
-                if enabled_var.get() and val:
-                    cmd += [f"-{name}", val]
+                enabled, val_var = var
+                val = val_var.get().strip()
+                if enabled.get() and val:
+                    cmd.extend([f"-{name}", val])
             else:
                 if var.get():
                     cmd.append(f"-{name}")
 
         try:
             subprocess.run(cmd, check=True)
-            messagebox.showinfo("Terminé", "Le script s'est exécuté avec succès.")
-            html = os.path.join(outdir, self.out_name.get())
-            webbrowser.open("file://" + os.path.abspath(html))
+            messagebox.showinfo("Completed", "The script ran successfully.")
+            html_file = os.path.abspath(os.path.join(output_dir, self.out_name.get()))
+            if shutil.which("xdg-open"):
+                subprocess.run(["xdg-open", html_file])
+            else:
+                webbrowser.open(f"file://{html_file}")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Échec de l’exécution :\n{e}")
+            messagebox.showerror("Error", f"Execution failed:\n{e}")
 
 if __name__ == "__main__":
     KronaGUI().mainloop()
