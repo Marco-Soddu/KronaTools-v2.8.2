@@ -6637,21 +6637,18 @@ function useHue()
 }
 
 function openStylePanel() {
-  // Si déjà ouvert, on ferme
+
   const existing = document.getElementById('style-panel');
   if (existing) {
     existing.remove();
     return;
   }
 
-  // Assure-toi que le graphe Krona est déjà chargé
   if (typeof head === 'undefined') {
     console.error('Krona non initialisé (head undefined)');
     return;
   }
   const rootNode = head;
-
-  // Création du panel
   const panel = document.createElement('div');
   panel.id = 'style-panel';
   Object.assign(panel.style, {
@@ -6692,7 +6689,6 @@ function openStylePanel() {
 
   document.body.appendChild(panel);
 
-  // Récupération des contrôles
   const colorsBtn       = panel.querySelector('#colors-btn');
   const colorPicker     = panel.querySelector('#color-picker');
   const resetBtn        = panel.querySelector('#reset-colors-btn');
